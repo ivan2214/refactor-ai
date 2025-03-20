@@ -349,7 +349,7 @@ export function CodeRefactoringTool() {
             <TabsContent value="input">
               <Textarea
                 placeholder="Paste your code here..."
-                className="min-h-[300px] max-h-[300px] overflow-y-scroll font-mono text-sm bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                className="min-h-[300px] max-h-[300px] overflow-y-scroll"
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value)}
                 disabled={isRefactoring}
@@ -427,7 +427,7 @@ export function CodeRefactoringTool() {
                               key={fileName}
                               variant="ghost"
                               className={cn(
-                                "w-full justify-start text-sm font-medium rounded-md transition-all",
+                                "w-full cursor-pointer justify-start text-sm font-medium rounded-md transition-all",
                                 activeFile === fileName
                                   ? "bg-primary/10 text-primary font-medium"
                                   : "hover:bg-primary/5"
@@ -533,16 +533,6 @@ export function CodeRefactoringTool() {
                     </div>
                   )}
                 </div>
-                {isRefactoring && !typingContent && activeFile && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/50 z-20">
-                    <div className="flex flex-col items-center gap-2">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      <p className="text-sm text-slate-300">
-                        Generating code...
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
               {activeFile && !isRefactoring && (
                 <div className="mt-2 text-xs text-muted-foreground">

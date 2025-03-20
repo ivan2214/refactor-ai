@@ -57,11 +57,11 @@ const MemoizedMarkdownBlock = memo(
     return (
       <ReactMarkdown
         components={{
-          code: ({ node, className, children, ...props }: CodeProps) => {
+          code: ({ node, className, children, ...props }) => {
             const match = /language-(\w+)/.exec(className || "");
             const codeContent = String(children).replace(/\n$/, "");
 
-            if (!props.inline && match) {
+            if (match) {
               // Get the language from the className
               const language = match[1];
 
