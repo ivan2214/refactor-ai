@@ -35,6 +35,22 @@ export function CodeRefactoringTool() {
 
   const processingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
+  const codeViewerRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRef = useRef<number>(0);
+
+  // Save scroll position when typing or updating content
+  useEffect(() => {
+    if (codeViewerRef.current) {
+      scrollPositionRef.current = codeViewerRef.current.scrollTop;
+    }
+  }, [typingContent, currentFileContent]);
+
+  // Restore scroll position after update
+  useEffect(() => {
+    if (codeViewerRef.current && scrollPositionRef.current > 0) {
+      codeViewerRef.current.scrollTop = scrollPositionRef.current;
+    }
+  }, [typingContent, currentFileContent]);
 
   // Typing effect for the active file
   useEffect(() => {
@@ -55,11 +71,36 @@ export function CodeRefactoringTool() {
     }
   }, [activeFile, typingIndex, refactoredFiles, isRefactoring]);
 
+  // Better content updating strategy to avoid jumps
+  const updateFileContent = (newFile: { name: string; content: string }) => {
+    setRefactoredFiles((prev) => {
+      // Check if file already exists
+      const fileExists = prev.some((file) => file.name === newFile.name);
+
+      if (fileExists) {
+        // Update existing file
+        return prev.map((file) =>
+          file.name === newFile.name
+            ? { ...file, content: newFile.content }
+            : file
+        );
+      } else {
+        // Add new file
+        return [...prev, newFile];
+      }
+    });
+  };
+
   // Reset typing when active file changes
   useEffect(() => {
     if (activeFile) {
       const currentFile = refactoredFiles.find((f) => f.name === activeFile);
       if (currentFile) {
+        // Save scroll position before content change
+        if (codeViewerRef.current) {
+          scrollPositionRef.current = codeViewerRef.current.scrollTop;
+        }
+
         setCurrentFileContent(currentFile.content);
         setTypingContent("");
         setTypingIndex(0);
@@ -114,6 +155,7 @@ export function CodeRefactoringTool() {
     setStreamStatus("Starting refactoring process...");
     setReceivedChunks(false);
     setProcessingTime(0);
+    scrollPositionRef.current = 0;
 
     try {
       console.log("Calling server action...");
@@ -155,7 +197,12 @@ export function CodeRefactoringTool() {
               partialObject.files.length,
               "files"
             );
-            setRefactoredFiles(partialObject.files);
+            // Use stable update to prevent jumps
+            partialObject.files.forEach(
+              (file: { name: string; content: string }) => {
+                updateFileContent(file);
+              }
+            );
             break;
 
           case "step_finish":
@@ -164,7 +211,12 @@ export function CodeRefactoringTool() {
 
           case "result":
             if (partialObject.files && partialObject.files.length > 0) {
-              setRefactoredFiles(partialObject.files);
+              // Process each file individually to avoid jumps
+              partialObject.files.forEach(
+                (file: { name: string; content: string }) => {
+                  updateFileContent(file);
+                }
+              );
 
               // Ensure all files are in the created files list
               const newFileNames = partialObject.files.map(
@@ -262,7 +314,19 @@ export function CodeRefactoringTool() {
     if (!currentFile) return "";
 
     const content = isRefactoring ? typingContent : currentFile.content;
-    const language = getFileExtension(activeFile);
+    // Auto-detect language based on file extension and content
+    const ext = getFileExtension(activeFile);
+
+    // Use specific React-related language identifiers for better highlighting
+    let language = ext;
+    if (
+      (ext === "js" || ext === "jsx" || ext === "tsx" || ext === "ts") &&
+      /import.*React|React.Component|function\s+[A-Z]|const\s+[A-Z].*=>|<[A-Z][A-Za-z]*>/.test(
+        content
+      )
+    ) {
+      language = ext === "ts" || ext === "tsx" ? "tsx" : "jsx";
+    }
 
     return codeToMarkdown(content, language);
   };
@@ -452,9 +516,12 @@ export function CodeRefactoringTool() {
                     <div className="h-3 w-3 rounded-full bg-green-500"></div>
                   </div>
                 </div>
-                <div className="pt-8 h-[400px] overflow-y-auto bg-slate-950 text-slate-50">
+                <div
+                  ref={codeViewerRef}
+                  className="pt-8 h-[400px] overflow-y-auto bg-slate-950 text-slate-50"
+                >
                   {activeFile ? (
-                    <div className="px-4 py-2">
+                    <div className="px-4 py-2 min-h-[calc(400px-2rem)]">
                       <MemoizedMarkdown
                         id={activeFile}
                         content={getCurrentFileMarkdown()}
