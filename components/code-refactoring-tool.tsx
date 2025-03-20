@@ -3,13 +3,19 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Code, FileText, Copy, Check } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Code, Copy, Check, RefreshCw, Folder } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { refactorCodeAction } from "@/lib/actions";
 import { toast } from "sonner";
 import { readStreamableValue } from "ai/rsc";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  MemoizedMarkdown,
+  codeToMarkdown,
+} from "@/components/memoized-markdown";
 
 export function CodeRefactoringTool() {
   const [inputCode, setInputCode] = useState("");
@@ -222,27 +228,107 @@ export function CodeRefactoringTool() {
     }
   };
 
+  // Get file extension for syntax highlighting class
+  const getFileExtension = (filename: string) => {
+    const parts = filename.split(".");
+    return parts.length > 1 ? parts.pop()?.toLowerCase() : "txt";
+  };
+
+  // Group files by folder structure
+  const groupFilesByFolder = () => {
+    const groups: Record<string, string[]> = {};
+
+    createdFiles.forEach((file) => {
+      const parts = file.split("/");
+      const folder = parts.length > 1 ? parts[0] : "root";
+
+      if (!groups[folder]) {
+        groups[folder] = [];
+      }
+
+      groups[folder].push(file);
+    });
+
+    return groups;
+  };
+
+  const fileGroups = groupFilesByFolder();
+
+  // Get current file content as markdown with proper language
+  const getCurrentFileMarkdown = () => {
+    if (!activeFile) return "";
+
+    const currentFile = refactoredFiles.find((f) => f.name === activeFile);
+    if (!currentFile) return "";
+
+    const content = isRefactoring ? typingContent : currentFile.content;
+    const language = getFileExtension(activeFile);
+
+    return codeToMarkdown(content, language);
+  };
+
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="border-primary/20 shadow-md">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl flex items-center gap-2">
+            <RefreshCw className="h-5 w-5 text-primary" />
+            Code Refactoring Tool
+          </CardTitle>
+        </CardHeader>
         <CardContent className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Code Refactoring Tool</h2>
-          <Textarea
-            placeholder="Paste your code here..."
-            className="min-h-[300px] max-h-[300px] overflow-y-scroll font-mono text-sm"
-            value={inputCode}
-            onChange={(e) => setInputCode(e.target.value)}
-            disabled={isRefactoring}
-          />
-          <div className="mt-4 flex justify-end">
+          <Tabs defaultValue="input" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="input">Input Code</TabsTrigger>
+              <TabsTrigger value="instructions">Instructions</TabsTrigger>
+            </TabsList>
+            <TabsContent value="input">
+              <Textarea
+                placeholder="Paste your code here..."
+                className="min-h-[300px] max-h-[300px] overflow-y-scroll font-mono text-sm bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                value={inputCode}
+                onChange={(e) => setInputCode(e.target.value)}
+                disabled={isRefactoring}
+              />
+            </TabsContent>
+            <TabsContent value="instructions">
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-md min-h-[300px] max-h-[300px] overflow-y-auto">
+                <h3 className="font-medium mb-2">How to use:</h3>
+                <ol className="list-decimal pl-5 space-y-2">
+                  <li>Paste your code in the input tab</li>
+                  <li>Click "Refactor Code" to start the process</li>
+                  <li>View the refactored files in the file explorer</li>
+                  <li>Click on any file to view its content</li>
+                  <li>Use the copy button to copy the code to clipboard</li>
+                </ol>
+              </div>
+            </TabsContent>
+          </Tabs>
+          <div className="mt-4 flex justify-between items-center">
+            <div className="text-sm text-muted-foreground">
+              {isRefactoring && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+                  Processing... {processingTime > 0 && `(${processingTime}s)`}
+                </div>
+              )}
+            </div>
             <Button
               onClick={handleRefactor}
               disabled={isRefactoring || !inputCode.trim()}
+              className="relative overflow-hidden group"
             >
-              {isRefactoring && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {isRefactoring ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Refactoring...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 transition-transform group-hover:rotate-90" />
+                  Refactor Code
+                </>
               )}
-              {isRefactoring ? "Refactoring..." : "Refactor Code"}
             </Button>
           </div>
         </CardContent>
@@ -250,78 +336,159 @@ export function CodeRefactoringTool() {
 
       {(isRefactoring || refactoredFiles.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* File List */}
-          <Card className="lg:col-span-1">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <FileText className="h-4 w-4" />
-                <h3 className="font-medium">Files</h3>
-              </div>
-              <ScrollArea className="h-[400px]">
-                <div className="space-y-1">
-                  {createdFiles.map((fileName) => (
-                    <Button
-                      key={fileName}
-                      variant="ghost"
-                      className={cn(
-                        "w-full justify-start text-sm font-medium",
-                        activeFile === fileName &&
-                          "bg-accent text-accent-foreground"
+          {/* File Explorer */}
+          <Card className="lg:col-span-1 border-primary/20 shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Folder className="h-4 w-4 text-primary" />
+                File Explorer
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <ScrollArea className="h-[400px] pr-4">
+                <div className="space-y-4">
+                  {Object.entries(fileGroups).map(([folder, files]) => (
+                    <div key={folder} className="space-y-1">
+                      {folder !== "root" && (
+                        <div className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground uppercase">
+                          <Folder className="h-3 w-3" />
+                          {folder}
+                        </div>
                       )}
-                      onClick={() => setActiveFile(fileName)}
-                    >
-                      {fileName}
-                    </Button>
+                      <div className="space-y-1 pl-2">
+                        {files.map((fileName) => {
+                          const ext = getFileExtension(fileName);
+                          return (
+                            <Button
+                              key={fileName}
+                              variant="ghost"
+                              className={cn(
+                                "w-full justify-start text-sm font-medium rounded-md transition-all",
+                                activeFile === fileName
+                                  ? "bg-primary/10 text-primary font-medium"
+                                  : "hover:bg-primary/5"
+                              )}
+                              onClick={() => setActiveFile(fileName)}
+                            >
+                              <div className="flex items-center gap-2 w-full overflow-hidden">
+                                <Code className="h-3.5 w-3.5 flex-shrink-0" />
+                                <span className="truncate">
+                                  {fileName.split("/").pop()}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className="ml-auto text-[10px] px-1 py-0 h-4 bg-slate-100 dark:bg-slate-800"
+                                >
+                                  {ext}
+                                </Badge>
+                              </div>
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>
-              <div className="mt-4 text-xs text-muted-foreground">
-                {streamStatus}
-                {isRefactoring && processingTime > 0 && (
-                  <span className="ml-2">({processingTime}s)</span>
-                )}
+              <div className="mt-4 text-xs text-muted-foreground border-t pt-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={cn(
+                      "h-2 w-2 rounded-full",
+                      isRefactoring ? "bg-amber-500" : "bg-emerald-500"
+                    )}
+                  ></div>
+                  <span>{streamStatus}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* File Content */}
-          <Card className="lg:col-span-3 w-full">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Code className="h-4 w-4" />
-                  <h3 className="font-medium">
-                    {activeFile ? activeFile : "Code"}
-                  </h3>
-                </div>
+          {/* Code Viewer with Memoized Markdown */}
+          <Card className="lg:col-span-3 w-full border-primary/20 shadow-md">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Code className="h-4 w-4 text-primary" />
+                  {activeFile ? (
+                    <div className="flex items-center gap-2">
+                      <span>{activeFile}</span>
+                      <Badge variant="outline" className="ml-1">
+                        {getFileExtension(activeFile || "")}
+                      </Badge>
+                    </div>
+                  ) : (
+                    "Code Viewer"
+                  )}
+                </CardTitle>
                 {activeFile && refactoredFiles.length > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={copyActiveFile}
-                    className="flex items-center gap-1"
+                    className="flex items-center gap-1 transition-all"
                   >
                     {copied ? (
-                      <Check className="h-3.5 w-3.5" />
+                      <>
+                        <Check className="h-3.5 w-3.5 text-green-500" />
+                        <span className="text-green-500">Copied!</span>
+                      </>
                     ) : (
-                      <Copy className="h-3.5 w-3.5" />
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy
+                      </>
                     )}
-                    {copied ? "Copied!" : "Copy"}
                   </Button>
                 )}
               </div>
-              <div className="relative">
-                <pre className="p-4 rounded-md bg-slate-950 text-slate-50 overflow-x-auto text-sm font-mono h-[400px] overflow-y-auto">
-                  <code>
-                    {isRefactoring
-                      ? typingContent
-                      : activeFile
-                      ? refactoredFiles.find((f) => f.name === activeFile)
-                          ?.content || ""
-                      : "Select a file to view its content"}
-                  </code>
-                </pre>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <div className="relative rounded-md overflow-hidden border">
+                <div className="absolute top-0 left-0 right-0 h-8 bg-slate-100 dark:bg-slate-800 border-b flex items-center px-4 z-10">
+                  <div className="flex space-x-2">
+                    <div className="h-3 w-3 rounded-full bg-red-500"></div>
+                    <div className="h-3 w-3 rounded-full bg-yellow-500"></div>
+                    <div className="h-3 w-3 rounded-full bg-green-500"></div>
+                  </div>
+                </div>
+                <div className="pt-8 h-[400px] overflow-y-auto bg-slate-950 text-slate-50">
+                  {activeFile ? (
+                    <div className="px-4 py-2">
+                      <MemoizedMarkdown
+                        id={activeFile}
+                        content={getCurrentFileMarkdown()}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400">
+                      <p>Select a file to view its content</p>
+                    </div>
+                  )}
+                </div>
+                {isRefactoring && !typingContent && activeFile && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/50 z-20">
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      <p className="text-sm text-slate-300">
+                        Generating code...
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
+              {activeFile && !isRefactoring && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  <span>
+                    Line count:{" "}
+                    {(
+                      refactoredFiles
+                        .find((f) => f.name === activeFile)
+                        ?.content.split("\n").length || 0
+                    ).toLocaleString()}
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
