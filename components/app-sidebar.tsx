@@ -21,6 +21,23 @@ import {
 } from "@/components/ui/sidebar";
 
 // This is sample data.
+
+/* 
+refactorCode : [
+[
+src,
+[
+components,
+[
+TodoList.tsx,
+TaskInput.tsx,
+TodoApp.tsx,
+]
+]
+]
+]
+ */
+
 const data = {
   tree: [
     [
@@ -56,19 +73,20 @@ export function AppSidebar({
   tree,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  tree?: typeof data.tree | null;
+  tree?: Tree | null;
 }) {
   return (
-    <Sidebar collapsible="none" className="hidden md:flex" {...props}>
+    <Sidebar collapsible="none" {...props}>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Files</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {tree ||
-                data.tree.map((item, index) => (
-                  <Tree key={index} item={item} />
-                ))}
+              {tree
+                ? tree.map((item, index) => <Tree key={index} item={item} />)
+                : data.tree.map((item, index) => (
+                    <Tree key={index} item={item} />
+                  ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

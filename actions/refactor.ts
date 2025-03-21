@@ -14,8 +14,6 @@ export async function refactor(code: string) {
 
   (async () => {
     try {
-      console.log("refactor");
-
       const { partialObjectStream } = streamObject({
         model,
         system:
@@ -23,25 +21,56 @@ export async function refactor(code: string) {
         prompt: `
       You are an expert code refactoring assistant. Your task is to analyze the provided code and refactor it into a well-structured, optimized, and modularized version while maintaining its functionality.
 
-## **Guidelines:**
-- **Refactor the code by creating independent, reusable, and well-typed components or modules** whenever possible.
-- **Organize files following a hierarchical structure** (folders and subfolders).
-- **Ensure compatibility with the following tree format:**
-  - Each folder should be an array where the first element is its name and the following elements are files or subfolders.
-  - Files should be strings.
-- **TypeScript best practices**: Improve typings and use strict TypeScript rules.
-- **Optimize performance**: Reduce unnecessary re-renders and improve state management if needed.
-- **Improve readability and maintainability**: Make the code easier to understand and modify.
-
-### **Code to Refactor:**
-${code}
+      ## **Guidelines:**
+      - **Refactor the code by creating independent, reusable, and well-typed components or modules** whenever possible.
+      - **Separate concerns**: Ensure that each file has a **single responsibility** and follows best practices.
+      - **TypeScript best practices**: Add or improve type safety, explicit typings, and strict TypeScript rules.
+      - **Optimize performance**: Reduce unnecessary re-renders and improve state management if needed.
+      - **Improve readability and maintainability**: Make the code easier to understand and modify.
+      - **Remove redundant or unnecessary code** while preserving functionality.
+      
+      ## **Response Format:**
+      Return a list of **independent files**, each containing the corresponding refactored code.
+      Each file should have:
+      1. A **name** (with a proper file extension based on its content).
+      2. A **path** where it should be located.
+      3. The **content** of the file (properly formatted, following best practices).
+      
+      ## **Example Output Format:**
+      json
+      {
+        "files": [
+          {
+            "name": "Component1.tsx",
+            "path": "./src/components/Component1.tsx",
+            "content": "/* Refactored code here */"
+          },
+          {
+            "name": "Component2.tsx",
+            "path": "./src/components/Component2.tsx",
+            "content": "/* Refactored code here */"
+          }
+        ],
+        "summary": "Refactored the code by splitting it into multiple files, improving type safety and optimizing performance.",
+        "performanceImpact": "Reduced re-renders and improved modularity."
+      }
+      
+      ---
+      ### **Code to Refactor:**
+      ${code}
       `,
         temperature: AI_CONFIG.temperature,
         schema: RefactorSchema,
       });
 
       for await (const partialObject of partialObjectStream) {
-        console.log("partialObject", partialObject);
+        const { files, performanceImpact, summary } = partialObject;
+        console.log("FILES: ", files);
+        console.log("---------");
+        console.log("SUMMARY: ", summary);
+        console.log("---------");
+        console.log("PERFORMANCE IMPACT: ", performanceImpact);
+        console.log("---------");
 
         stream.update(partialObject);
       }
@@ -52,9 +81,6 @@ ${code}
       stream.error(error);
     }
   })();
-
-  console.log("returning");
-
   return {
     object: stream.value,
   };

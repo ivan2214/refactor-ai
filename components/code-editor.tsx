@@ -12,7 +12,7 @@ import { FileType } from "@/lib/types";
 interface CodeEditorProps {
   code: string;
   onChange?: (code: string) => void;
-  fileType: FileType;
+  fileType: string;
   readOnly?: boolean;
   autoScroll?: boolean;
 }

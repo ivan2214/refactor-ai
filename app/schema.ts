@@ -8,19 +8,24 @@ export const fileSchema = z.array(
 );
 
 export const RefactorSchema = z.object({
-  tree: z
+  files: z
     .array(
-      z.union([
-        z.string().describe("Nombre de un archivo individual"), // Para archivos individuales
-        z
-          .tuple([
-            z.string().describe("Nombre del folder"), // Nombre del folder
-            z
-              .array(z.any())
-              .describe("Subdirectorios o archivos dentro del folder"), // Subdirectorios o archivos dentro del folder
-          ])
-          .describe("Estructura de un folder con archivos y subdirectorios"),
-      ])
+      z
+        .object({
+          name: z
+            .string()
+            .describe(
+              "El nombre del archivo con su extensión (.tsx, .jsx, .css, etc.) del archivo refactorizado"
+            ),
+          path: z.string().describe("El path del archivo refactorizado"),
+          content: z.string().describe("El codigo del archivo refactorizado"),
+        })
+        .describe("Estructura del archivo refactorizado")
     )
-    .describe("Estructura del árbol de archivos refactorizados"),
+    .min(2)
+    .describe("Lista de archivos refactorizados"),
+  summary: z.string().describe("Resumen de los cambios realizados"),
+  performanceImpact: z
+    .string()
+    .describe("Impacto en el rendimiento de los cambios"),
 });
