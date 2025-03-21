@@ -7,7 +7,6 @@ import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-typescript";
 import "prismjs/components/prism-jsx";
 import "prismjs/components/prism-tsx";
-import { FileType } from "@/lib/types";
 
 interface CodeEditorProps {
   code: string;

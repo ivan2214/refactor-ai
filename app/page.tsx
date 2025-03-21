@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { RefactoredCode } from "@/lib/types";
 import { CodeEditor } from "@/components/code-editor";
 import { AppSidebar, Tree } from "@/components/app-sidebar";
 
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
-import { Moon, Sun } from "lucide-react";
+import { Copy, Moon, Redo, Sun, Undo } from "lucide-react";
 import { toast } from "sonner";
 import {
   ResizablePanelGroup,
@@ -17,21 +17,47 @@ import {
 import { refactor } from "@/actions/refactor";
 import { readStreamableValue } from "ai/rsc";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 export const maxDuration = 30;
 
 export default function Home() {
   const [code, setCode] = useState("");
-
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [refactoredCode, setRefactoredCode] = useState<RefactoredCode | null>(
     null
   );
   const { theme, setTheme } = useTheme();
-
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingFile, setStreamingFile] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (refactoredCode && refactoredCode?.files?.length > 0 && !selectedFile) {
+      setSelectedFile(refactoredCode?.files[0].path);
+    }
+  }, [refactoredCode?.files, selectedFile]);
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
+    setHistory((prev) => [...prev.slice(0, historyIndex + 1), newCode]);
+    setHistoryIndex((prev) => prev + 1);
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      setHistoryIndex((prev) => prev - 1);
+      setCode(history[historyIndex - 1]);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      setHistoryIndex((prev) => prev + 1);
+      setCode(history[historyIndex + 1]);
+    }
   };
 
   const handleRefactor = async () => {
@@ -44,15 +70,22 @@ export default function Home() {
 
     try {
       const { object } = await refactor(code);
+      let firstFile = true;
       for await (const partialObject of readStreamableValue(object)) {
         if (partialObject) {
           setRefactoredCode(partialObject);
+          if (firstFile && partialObject.files?.[0]?.path) {
+            setSelectedFile(partialObject.files[0].path);
+            setStreamingFile(partialObject.files[0].path);
+            firstFile = false;
+          }
         }
       }
     } catch (error) {
       toast.error("Failed to refactor code");
     } finally {
       setIsLoading(false);
+      setStreamingFile(null);
     }
   };
 
@@ -154,6 +187,21 @@ export default function Home() {
 
   console.log("refactoredCode", parsedFilesName(refactoredCode));
 
+  const getCurrentFile = () => {
+    const file = refactoredCode?.files?.find(
+      (file) => file.path === selectedFile
+    );
+    console.log("getCurrentFile", file);
+
+    if (!refactoredCode || !selectedFile) return null;
+    return file;
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b">
@@ -174,33 +222,48 @@ export default function Home() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-6">
-          <Button onClick={handleRefactor} disabled={isLoading}>
-            {isLoading ? "Refactoring..." : "Refactor Code"}
-          </Button>
-        </div>
+        <section className="flex flex-col gap-4">
+          <Card className="h-full p-4 bg-muted/10 rounded-lg">
+            <CardHeader className="flex bg-background  z-10 sticky top-5 items-center gap-4 mb-6">
+              <h2 className="text-lg font-semibold mb-2">Original Code</h2>
+              <Button
+                className="cursor-pointer"
+                onClick={handleRefactor}
+                disabled={isLoading}
+              >
+                {isLoading ? "Refactoring..." : "Refactor Code"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleUndo}
+                disabled={historyIndex <= 0}
+              >
+                <Undo className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleRedo}
+                disabled={historyIndex >= history.length - 1}
+              >
+                <Redo className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <CodeEditor
+                code={code}
+                onChange={handleCodeChange}
+                fileType={detectedFileType(code)}
+              />
+            </CardContent>
+          </Card>
 
-        <ResizablePanelGroup direction="horizontal" className="min-h-[600px]">
-          <SidebarProvider>
-            <SidebarInset>
-              <ResizableHandle />
-
-              <ResizablePanel defaultSize={70}>
-                <div className="h-full p-4 bg-muted/10 rounded-lg">
-                  <h2 className="text-lg font-semibold mb-2">Original Code</h2>
-                  <CodeEditor
-                    code={code}
-                    onChange={handleCodeChange}
-                    fileType={detectedFileType(code)}
-                  />
-                </div>
-              </ResizablePanel>
-            </SidebarInset>
-            <ResizablePanel defaultSize={30}>
-              <AppSidebar
-                side="right"
-                tree={parsedFilesName(refactoredCode) as string[]}
-                /* tree={[
+          <Card className="h-full p-4 bg-muted/10 rounded-lg">
+            <CardContent>
+              <SidebarProvider>
+                <AppSidebar
+                  collapsible="none"
+                  tree={parsedFilesName(refactoredCode) as string[]}
+                  /* tree={[
                   [
                     "src",
                     [
@@ -211,10 +274,63 @@ export default function Home() {
                     ],
                   ],
                 ]} */
-              />
-            </ResizablePanel>
-          </SidebarProvider>
-        </ResizablePanelGroup>
+                />
+                <SidebarInset>
+                  <div className="flex-1 p-4 bg-muted/10">
+                    <div className="flex justify-between items-center mb-2">
+                      <h2 className="text-lg font-semibold">Refactored Code</h2>
+                      {getCurrentFile() && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            copyToClipboard(getCurrentFile()?.content || "")
+                          }
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    {getCurrentFile() ? (
+                      <>
+                        <CodeEditor
+                          code={getCurrentFile()?.content || ""}
+                          onChange={() => {}}
+                          fileType={detectedFileType(
+                            getCurrentFile()?.content || ""
+                          )}
+                          readOnly
+                          autoScroll={streamingFile === selectedFile}
+                        />
+                        <Separator className="my-4" />
+                        <div className="space-y-4">
+                          <div>
+                            <h3 className="font-semibold mb-2">Summary</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {refactoredCode?.summary}
+                            </p>
+                          </div>
+                          <div>
+                            <h3 className="font-semibold mb-2">
+                              Performance Impact
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              {refactoredCode?.performanceImpact}
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        Refactored code will appear here
+                      </div>
+                    )}
+                  </div>
+                </SidebarInset>
+              </SidebarProvider>
+            </CardContent>
+          </Card>
+        </section>
       </main>
     </div>
   );

@@ -76,7 +76,7 @@ export function AppSidebar({
   tree?: Tree | null;
 }) {
   return (
-    <Sidebar collapsible="none" {...props}>
+    <Sidebar {...props}>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Files</SidebarGroupLabel>
