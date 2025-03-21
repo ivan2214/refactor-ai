@@ -1,5 +1,6 @@
 "use server";
 
+import { fileSchema } from "@/app/schema";
 import { google } from "@ai-sdk/google";
 import { streamObject } from "ai";
 import { createStreamableValue } from "ai/rsc";
@@ -11,12 +12,6 @@ const model = google("gemini-1.5-pro-latest", {
 });
 
 // Definir el esquema para los archivos refactorizados
-const fileSchema = z.array(
-  z.object({
-    name: z.string().describe("The filename of the refactored component"),
-    content: z.string().describe("The complete code content of the file"),
-  })
-);
 
 export async function refactorCodeAction(code: string) {
   console.log("Starting refactorCodeAction");
@@ -55,8 +50,6 @@ export async function refactorCodeAction(code: string) {
 
         // Procesar los resultados en streaming
         for await (const partialObject of partialObjectStream) {
-          console.log("Received partial object update:", partialObject);
-
           if (Array.isArray(partialObject)) {
             for (const file of partialObject) {
               if (file?.name && !detectedFileNames.has(file.name)) {
@@ -67,16 +60,13 @@ export async function refactorCodeAction(code: string) {
                 });
               }
             }
-
-            currentFiles = partialObject;
+            currentFiles = partialObject; // Actualizar los archivos actuales en streaming
             stream.update({
               type: "content_update",
               files: currentFiles,
             });
           }
         }
-
-        console.log("Streaming complete");
 
         stream.update({
           type: "status",
