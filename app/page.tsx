@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FileType, RefactoredCode } from "@/lib/types";
+import { FileType, RefactoredCode, TreeNode } from "@/lib/types";
 import { CodeEditor } from "@/components/code-editor";
-import { FileExplorer } from "@/components/file-explorer";
-import { FileTypeSelector } from "@/components/file-type-selector";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useTheme } from "next-themes";
@@ -15,8 +13,10 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
-import { refactor } from "./action";
+import { refactor } from "../actions/refactor";
 import { readStreamableValue } from "ai/rsc";
+import { AppSidebar } from "@/components/app-sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 export const maxDuration = 30;
 
@@ -34,10 +34,10 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (refactoredCode && refactoredCode?.files?.length > 0 && !selectedFile) {
-      setSelectedFile(refactoredCode?.files[0].path);
+    if (refactoredCode && refactoredCode.tree.length > 0 && !selectedFile) {
+      setSelectedFile(extractFirstFilePath(refactoredCode.tree));
     }
-  }, [refactoredCode?.files, selectedFile]);
+  }, [refactoredCode?.tree, selectedFile]);
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
@@ -70,20 +70,35 @@ export default function Home() {
 
     try {
       const { object } = await refactor(code);
+      if (!object) {
+        toast.error("Failed to refactor code");
+        return;
+      }
+
+      console.log("Object:", object);
+
       let firstFile = true;
 
       for await (const partialObject of readStreamableValue(object)) {
+        console.log("Partial object:", partialObject);
+
         if (partialObject) {
           setRefactoredCode(partialObject);
 
-          if (firstFile && partialObject.files?.[0]?.path) {
-            setSelectedFile(partialObject.files[0].path);
-            setStreamingFile(partialObject.files[0].path);
+          if (firstFile && partialObject.tree?.length) {
+            console.log(
+              "Extracted first file:",
+              extractFirstFilePath(partialObject.tree)
+            );
+
+            setSelectedFile(extractFirstFilePath(partialObject.tree));
+            setStreamingFile(extractFirstFilePath(partialObject.tree));
             firstFile = false;
           }
         }
       }
     } catch (error) {
+      console.error(error);
       toast.error("Failed to refactor code");
     } finally {
       setIsLoading(false);
@@ -91,19 +106,20 @@ export default function Home() {
     }
   };
 
+  const extractFirstFilePath = (tree: TreeNode[]): string | null => {
+    for (const item of tree) {
+      if (typeof item === "string") return item;
+      if (Array.isArray(item)) {
+        const nested = extractFirstFilePath(item[1]);
+        if (nested) return `${item[0]}/${nested}`;
+      }
+    }
+    return null;
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard");
-  };
-
-  const getCurrentFile = () => {
-    const file = refactoredCode?.files?.find(
-      (file) => file.path === selectedFile
-    );
-    console.log("getCurrentFile", file);
-
-    if (!refactoredCode || !selectedFile) return null;
-    return file;
   };
 
   return (
@@ -129,7 +145,6 @@ export default function Home() {
 
       <main className="container mx-auto px-4 py-8">
         <div className="flex items-center gap-4 mb-6">
-          <FileTypeSelector value={fileType} onChange={setFileType} />
           <Button onClick={handleRefactor} disabled={isLoading}>
             {isLoading ? "Refactoring..." : "Refactor Code"}
           </Button>
@@ -149,89 +164,63 @@ export default function Home() {
           </Button>
         </div>
 
+        <div className="h-full p-4 bg-muted/10 rounded-lg">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-semibold">Original Code</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => copyToClipboard(code)}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <CodeEditor
+            code={code}
+            onChange={handleCodeChange}
+            fileType={fileType}
+          />
+        </div>
+
         <ResizablePanelGroup direction="horizontal" className="min-h-[600px]">
-          <ResizablePanel defaultSize={50}>
-            <div className="h-full p-4 bg-muted/10 rounded-lg">
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-lg font-semibold">Original Code</h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => copyToClipboard(code)}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-              <CodeEditor
-                code={code}
-                onChange={handleCodeChange}
-                fileType={fileType}
-              />
-            </div>
-          </ResizablePanel>
-
-          <ResizableHandle />
-
-          <ResizablePanel defaultSize={50}>
-            <div className="h-full flex">
-              {refactoredCode && refactoredCode?.files?.length > 0 && (
-                <FileExplorer
-                  files={refactoredCode?.files}
-                  selectedFile={selectedFile}
-                  onSelectFile={setSelectedFile}
-                  streamingFile={streamingFile}
+          {refactoredCode && (
+            <SidebarProvider className="items-start">
+              <ResizablePanel defaultSize={30}>
+                <AppSidebar
+                  tree={
+                    refactoredCode?.tree as (
+                      | string
+                      | (string | (string | string[])[])[]
+                    )[]
+                  }
+                  className="h-full"
                 />
-              )}
-              <div className="flex-1 p-4 bg-muted/10">
-                <div className="flex justify-between items-center mb-2">
-                  <h2 className="text-lg font-semibold">Refactored Code</h2>
-                  {getCurrentFile() && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() =>
-                        copyToClipboard(getCurrentFile()?.content || "")
-                      }
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                {getCurrentFile() ? (
-                  <>
-                    <CodeEditor
-                      code={getCurrentFile()?.content || ""}
-                      onChange={() => {}}
-                      fileType={fileType}
-                      readOnly
-                      autoScroll={streamingFile === selectedFile}
-                    />
-                    <Separator className="my-4" />
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="font-semibold mb-2">Summary</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {refactoredCode?.summary}
-                        </p>
+              </ResizablePanel>
+              <SidebarInset>
+                <ResizableHandle />
+
+                <ResizablePanel defaultSize={70}>
+                  <div className="h-full p-4 bg-muted/10 rounded-lg">
+                    <h2 className="text-lg font-semibold mb-2">
+                      Refactored Code
+                    </h2>
+                    {selectedFile ? (
+                      <CodeEditor
+                        code={selectedFile}
+                        onChange={() => {}}
+                        fileType={fileType}
+                        readOnly
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        Refactored code will appear here
                       </div>
-                      <div>
-                        <h3 className="font-semibold mb-2">
-                          Performance Impact
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {refactoredCode?.performanceImpact}
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    Refactored code will appear here
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          </ResizablePanel>
+                </ResizablePanel>
+              </SidebarInset>
+            </SidebarProvider>
+          )}
         </ResizablePanelGroup>
       </main>
     </div>

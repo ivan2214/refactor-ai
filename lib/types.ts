@@ -1,22 +1,9 @@
-export type FileType = 'js' | 'ts' | 'jsx' | 'tsx';
+export type FileType = "js" | "ts" | "jsx" | "tsx";
 
-export type CodeChange = {
-  type: 'improvement' | 'suggestion' | 'warning';
-  description: string;
-  line: number;
-};
-
-export type RefactoredFile = {
-  name: string;
-  path: string;
-  content: string;
-  changes: CodeChange[];
-};
+export type TreeNode = string | [string, TreeNode[]];
 
 export type RefactoredCode = {
-  files: RefactoredFile[];
-  summary: string;
-  performanceImpact: string;
+  tree: TreeNode[];
 };
 
-export type EditorTheme = 'light' | 'dark';
+export type EditorTheme = "light" | "dark";

@@ -11,7 +11,7 @@ import { FileType } from "@/lib/types";
 
 interface CodeEditorProps {
   code: string;
-  onChange: (code: string) => void;
+  onChange?: (code: string) => void;
   fileType: FileType;
   readOnly?: boolean;
   autoScroll?: boolean;
@@ -46,7 +46,7 @@ export function CodeEditor({
         name="code"
         id="code"
         value={code}
-        onValueChange={readOnly ? () => {} : onChange}
+        onValueChange={readOnly ? () => {} : onChange ?? (() => {})}
         highlight={highlight}
         padding={16}
         readOnly={readOnly}
