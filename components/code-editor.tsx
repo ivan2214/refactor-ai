@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import Editor from "react-simple-code-editor";
 import Prism from "prismjs";
 import "prismjs/components/prism-javascript";
@@ -14,6 +14,7 @@ interface CodeEditorProps {
   onChange: (code: string) => void;
   fileType: FileType;
   readOnly?: boolean;
+  autoScroll?: boolean;
 }
 
 export function CodeEditor({
@@ -21,13 +22,26 @@ export function CodeEditor({
   onChange,
   fileType,
   readOnly = false,
+  autoScroll = false,
 }: CodeEditorProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
+
   const highlight = (code: string) => {
     return Prism.highlight(code, Prism.languages[fileType], fileType);
   };
 
+  useEffect(() => {
+    if (autoScroll && editorRef.current) {
+      const element = editorRef.current;
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [code, autoScroll]);
+
   return (
-    <div className="w-full h-full min-h-[400px] rounded-md border bg-background">
+    <div
+      ref={editorRef}
+      className="w-full h-full min-h-[400px] rounded-md border bg-background overflow-auto"
+    >
       <Editor
         name="code"
         id="code"

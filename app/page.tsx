@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileType, RefactoredCode } from "@/lib/types";
 import { CodeEditor } from "@/components/code-editor";
 import { FileExplorer } from "@/components/file-explorer";
@@ -27,10 +27,17 @@ export default function Home() {
     null
   );
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [streamingFile, setStreamingFile] = useState<string | null>(null);
   const { theme, setTheme } = useTheme();
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (refactoredCode && refactoredCode?.files?.length > 0 && !selectedFile) {
+      setSelectedFile(refactoredCode?.files[0].path);
+    }
+  }, [refactoredCode?.files, selectedFile]);
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
@@ -58,15 +65,30 @@ export default function Home() {
       return;
     }
     setIsLoading(true);
-    const { object } = await refactor(code);
-    for await (const partialObject of readStreamableValue(object)) {
-      if (partialObject) {
-        setRefactoredCode(partialObject);
-        setSelectedFile(refactoredCode?.files[0]?.path || null);
-      }
-    }
+    setRefactoredCode(null);
+    setSelectedFile(null);
 
-    setIsLoading(false);
+    try {
+      const { object } = await refactor(code);
+      let firstFile = true;
+
+      for await (const partialObject of readStreamableValue(object)) {
+        if (partialObject) {
+          setRefactoredCode(partialObject);
+
+          if (firstFile && partialObject.files?.[0]?.path) {
+            setSelectedFile(partialObject.files[0].path);
+            setStreamingFile(partialObject.files[0].path);
+            firstFile = false;
+          }
+        }
+      }
+    } catch (error) {
+      toast.error("Failed to refactor code");
+    } finally {
+      setIsLoading(false);
+      setStreamingFile(null);
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -75,8 +97,13 @@ export default function Home() {
   };
 
   const getCurrentFile = () => {
+    const file = refactoredCode?.files?.find(
+      (file) => file.path === selectedFile
+    );
+    console.log("getCurrentFile", file);
+
     if (!refactoredCode || !selectedFile) return null;
-    return refactoredCode.files.find((file) => file.path === selectedFile);
+    return file;
   };
 
   return (
@@ -116,7 +143,7 @@ export default function Home() {
           <Button
             variant="outline"
             onClick={handleRedo}
-            disabled={historyIndex >= history?.length - 1}
+            disabled={historyIndex >= history.length - 1}
           >
             <Redo className="h-4 w-4" />
           </Button>
@@ -152,6 +179,7 @@ export default function Home() {
                   files={refactoredCode?.files}
                   selectedFile={selectedFile}
                   onSelectFile={setSelectedFile}
+                  streamingFile={streamingFile}
                 />
               )}
               <div className="flex-1 p-4 bg-muted/10">
@@ -176,6 +204,7 @@ export default function Home() {
                       onChange={() => {}}
                       fileType={fileType}
                       readOnly
+                      autoScroll={streamingFile === selectedFile}
                     />
                     <Separator className="my-4" />
                     <div className="space-y-4">
