@@ -43,15 +43,6 @@ const enhanceLanguageDetection = (
   return language || "";
 };
 
-// Define proper types for the code component
-type CodeProps = {
-  node: any;
-  className?: string;
-  children: React.ReactNode;
-  inline?: boolean;
-  [key: string]: any;
-};
-
 const MemoizedMarkdownBlock = memo(
   ({ content }: { content: string }) => {
     return (
